@@ -1,18 +1,9 @@
 import streamlit as st
-import os
 from dotenv import load_dotenv
 from llama_index.core import (
-    SimpleDirectoryReader, 
-    VectorStoreIndex, 
     Settings, 
     StorageContext, 
     load_index_from_storage
-)
-from llama_index.core.ingestion import IngestionPipeline
-from llama_index.core.node_parser import SentenceSplitter
-from llama_index.core.extractors import (
-    QuestionsAnsweredExtractor,
-    TitleExtractor
 )
 from llama_index.llms.openai import OpenAI
 from llama_index.agent.openai import OpenAIAgent
@@ -25,58 +16,22 @@ nest_asyncio.apply()
 load_dotenv()
 
 # Define global LLM and embeddings
-# For base model : gpt-3.5-turbo
 llm = OpenAI(temperature=0, model="gpt-4o", max_tokens=512)
 
 Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
 
-# Define paths to the data folders
-data_paths = {
-    "partners": "./data/partners",
-    "pole_digital_information": "./data/pole digital information"
+# Define paths to the storage folders
+storage_paths = {
+    "partners": "./storage/partners_vector",
+    "pole_digital_information": "./storage/pole_digital_information_vector"
 }
 
-# Define the ingestion pipeline
-pipeline = IngestionPipeline(
-    transformations=[
-        SentenceSplitter(chunk_size=512, chunk_overlap=100),
-        TitleExtractor(nodes=5, llm=llm),
-        QuestionsAnsweredExtractor(questions=3, llm=llm)
-    ]
-)
-
-def load_or_create_indices(folder, docs):
-    vector_storage_path = f"./storage/{folder}_vector"
-
-    if os.path.exists(vector_storage_path):
-        # Load existing indices
-        vector_index = load_index_from_storage(
-            StorageContext.from_defaults(persist_dir=vector_storage_path)
-        )
-    else:
-        # Process documents through the pipeline
-        nodes = pipeline.run(documents=docs)
-
-        # Exclude specific metadata keys for each node
-        for node in nodes:
-            node.excluded_llm_metadata_keys = ['file_path', 'file_type', 'file_size', 'creation_date', 'last_modified_date']
-            node.excluded_embed_metadata_keys = ['file_path', 'file_type', 'file_size', 'creation_date', 'last_modified_date']
-
-        # Create new indices
-        vector_index = VectorStoreIndex(nodes)
-
-        # Persist indices to storage
-        vector_index.storage_context.persist(persist_dir=vector_storage_path)
-
-    return vector_index
-
-# Load and process all documents
-documents = {}
+# Load existing indices from storage
 indices = {}
-for folder, path in data_paths.items():
-    docs = SimpleDirectoryReader(input_dir=path).load_data()
-    documents[folder] = docs
-    vector_index = load_or_create_indices(folder, docs)
+for folder, path in storage_paths.items():
+    vector_index = load_index_from_storage(
+        StorageContext.from_defaults(persist_dir=path)
+    )
     indices[folder] = {
         "vector_index": vector_index
     }
